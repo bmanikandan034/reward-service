@@ -1,0 +1,10 @@
+INSERT INTO customer (id, name) VALUES (1,'Mani');
+INSERT INTO customer (id, name) VALUES (2,'Raja');
+INSERT INTO customer (id, name) VALUES (3,'Ram');
+INSERT INTO transaction (amount, date, customer_id) VALUES (120, CURRENT_DATE-60, 1);
+INSERT INTO transaction (amount, date, customer_id) VALUES (85,  CURRENT_DATE-60, 1);
+INSERT INTO transaction (amount, date, customer_id) VALUES (160, CURRENT_DATE-30, 1);
+INSERT INTO transaction (amount, date, customer_id) VALUES (200, CURRENT_DATE-60, 2);
+INSERT INTO transaction (amount, date, customer_id) VALUES (95,  CURRENT_DATE-30, 2);
+INSERT INTO transaction (amount, date, customer_id) VALUES (60,  CURRENT_DATE-30, 3);
+INSERT INTO transaction (amount, date, customer_id) VALUES (175, CURRENT_DATE, 3);
