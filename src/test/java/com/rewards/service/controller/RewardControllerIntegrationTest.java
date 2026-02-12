@@ -45,7 +45,7 @@ class RewardControllerIntegrationTest {
 	@Test
 	void shouldReturnRewardsForValidCustomer() throws Exception {
 
-		mockMvc.perform(get("/api/rewards/{customerId}", customer.getId())).andExpect(status().isOk())
+		mockMvc.perform(get("/api/rewards/{customerId}", customer.getCustomerId())).andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true));
 	}
 
@@ -58,7 +58,7 @@ class RewardControllerIntegrationTest {
 	@Test
 	void shouldFilterByDateRange() throws Exception {
 
-		mockMvc.perform(get("/api/rewards/{customerId}", customer.getId())
+		mockMvc.perform(get("/api/rewards/{customerId}", customer.getCustomerId())
 				.param("startDate", LocalDate.now().minusMonths(2).toString())
 				.param("endDate", LocalDate.now().toString())).andExpect(status().isOk());
 	}

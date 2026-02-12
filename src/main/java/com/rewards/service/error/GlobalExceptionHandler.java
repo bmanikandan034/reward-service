@@ -1,9 +1,13 @@
 package com.rewards.service.error;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.rewards.service.common.RewardResponseUtil;
@@ -29,13 +33,18 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<?> handleGeneric(Exception e) {
 
 		log.error("Unexpected error occurred", e);
-	return RewardResponseUtil.failure("Something went wrong");
+		return RewardResponseUtil.failure("Something went wrong");
 	}
-	
-	
+
 	@ExceptionHandler(NoResourceFoundException.class)
 	public ResponseEntity<?> handleNoResource(NoResourceFoundException ex) {
-	    return ResponseEntity.notFound().build();
+		return ResponseEntity.notFound().build();
+	}
+
+	@ExceptionHandler(CustomerNotFoundException.class)
+	public ResponseEntity<String> handleCustomerNotFound(CustomerNotFoundException ex) {
+		log.error("Customer Not Found   ", ex);
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
 	}
 
 }

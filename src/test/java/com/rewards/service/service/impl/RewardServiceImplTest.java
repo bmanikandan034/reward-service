@@ -4,88 +4,154 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.rewards.service.dto.RewardResponseDTO;
+import com.rewards.service.entity.Customer;
 import com.rewards.service.entity.Transaction;
-import com.rewards.service.error.ResourceNotFoundException;
+import com.rewards.service.error.CustomerNotFoundException;
+import com.rewards.service.repository.CustomerRepository;
 import com.rewards.service.repository.TransactionRepository;
-
+import com.rewards.service.util.RewardCalculator;
+/***
+ * @author Manikandan B
+ */
+@ExtendWith(MockitoExtension.class)
 class RewardServiceImplTest {
 
-    @Mock
-    private TransactionRepository repository;
+	@InjectMocks
+	private RewardServiceImpl rewardService;
 
-    @InjectMocks
-    private RewardServiceImpl rewardService;
+	@Mock
+	private CustomerRepository customerRepository;
 
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
+	@Mock
+	private TransactionRepository transactionRepository;
+
+	private Long customerId;
+	private Customer customer;
+	private Transaction transaction1;
+	private Transaction transaction2;
+
+	@BeforeEach
+	void setUp() {
+		customerId = 1L;
+
+		customer = new Customer();
+		customer.setCustomerId(customerId);
+		customer.setName("Manikandan");
+
+		transaction1 = new Transaction();
+		transaction1.setCustomer(customer);
+		transaction1.setAmount(120.0);
+		transaction1.setDate(LocalDate.of(2025, 1, 10));
+
+		transaction2 = new Transaction();
+		transaction2.setCustomer(customer);
+		transaction2.setAmount(80.0);
+		transaction2.setDate(LocalDate.of(2025, 1, 20));
+	}
+
+	@Test
+    void testGetRewards_WithDateRange() {
+
+        when(customerRepository.existsById(customerId)).thenReturn(true);
+        when(customerRepository.findById(customerId)).thenReturn(Optional.of(customer));
+
+        when(transactionRepository.findByCustomerIdAndDateBetween(
+                eq(customerId), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(transaction1, transaction2));
+
+        try (MockedStatic<RewardCalculator> mockedStatic = mockStatic(RewardCalculator.class)) {
+
+        	mockedStatic.when(() -> RewardCalculator.calculate(120.0)).thenReturn(90);
+            mockedStatic.when(() -> RewardCalculator.calculate(80.0)).thenReturn(30);
+
+            RewardResponseDTO response = rewardService.getRewards(
+                    customerId,
+                    LocalDate.of(2025, 1, 1),
+                    LocalDate.of(2025, 1, 31)
+            );
+
+            assertNotNull(response);
+            assertEquals(customerId, response.getCustomerId());
+            assertEquals("Manikandan", response.getCustomerName());
+            assertEquals(120L, response.getTotalRewards());
+
+            Map<String, Long> monthly = response.getMonthlyRewards();
+            assertEquals(1, monthly.size());
+            assertTrue(monthly.containsKey(YearMonth.of(2025, 1).toString()));
+
+            verify(transactionRepository, times(1))
+                    .findByCustomerIdAndDateBetween(eq(customerId), any(), any());
+        }
     }
 
-    @Test
-    void shouldCalculateRewardsSuccessfully() {
+	@Test
+    void testGetRewards_WithoutDateRange() {
 
-        Long customerId = 1L;
+        when(customerRepository.existsById(customerId)).thenReturn(true);
+        when(customerRepository.findById(customerId)).thenReturn(Optional.of(customer));
 
-        List<Transaction> transactions = List.of(
-                new Transaction(1L, 120.0, LocalDate.now().minusMonths(1), null),
-                new Transaction(2L, 75.0, LocalDate.now().minusMonths(1), null),
-                new Transaction(3L, 40.0, LocalDate.now(), null)
-        );
+        when(transactionRepository.findByCustomerId(customerId))
+                .thenReturn(List.of(transaction1));
 
-        when(repository.findByCustomerId(customerId)).thenReturn(transactions);
+        try (MockedStatic<RewardCalculator> mockedStatic = mockStatic(RewardCalculator.class)) {
 
-        RewardResponseDTO response = rewardService.getRewards(customerId, null, null);
+        	mockedStatic.when(() -> RewardCalculator.calculate(120.0)).thenReturn(90);
 
-        assertNotNull(response);
-        assertEquals(customerId, response.getId());
-        assertTrue(response.getTotalRewards() > 0);
+            RewardResponseDTO response =
+                    rewardService.getRewards(customerId, null, null);
 
-        verify(repository, times(1)).findByCustomerId(customerId);
+            assertEquals(90L, response.getTotalRewards());
+
+            verify(transactionRepository, times(1))
+                    .findByCustomerId(customerId);
+        }
     }
 
-    @Test
-    void shouldThrowExceptionWhenNoTransactionsFound() {
+	@Test
+	void testGetRewards_InvalidCustomerId() {
 
-        Long customerId = 99L;
+		assertThrows(IllegalArgumentException.class, () -> rewardService.getRewards(0L, null, null));
+	}
 
-        when(repository.findByCustomerId(customerId)).thenReturn(List.of());
+	@Test
+	void testGetRewards_InvalidDateRange() {
 
-        assertThrows(ResourceNotFoundException.class, () ->
+		assertThrows(IllegalArgumentException.class,
+				() -> rewardService.getRewards(customerId, LocalDate.of(2025, 2, 1), LocalDate.of(2025, 1, 1)));
+	}
+
+	@Test
+    void testGetRewards_CustomerNotFound() {
+
+        when(customerRepository.existsById(customerId)).thenReturn(false);
+
+        assertThrows(CustomerNotFoundException.class, () ->
                 rewardService.getRewards(customerId, null, null));
-    }
 
-    @Test
-    void shouldFilterByDateRange() {
-
-        Long customerId = 1L;
-        LocalDate start = LocalDate.now().minusMonths(2);
-        LocalDate end = LocalDate.now();
-
-        when(repository.findByCustomerIdAndDateBetween(customerId, start, end))
-                .thenReturn(List.of(
-                        new Transaction(1L, 150.0, LocalDate.now().minusMonths(1), null)
-                ));
-
-        RewardResponseDTO response = rewardService.getRewards(customerId, start, end);
-
-        assertEquals(customerId, response.getId());
-        assertTrue(response.getTotalRewards() > 0);
-
-        verify(repository, times(1))
-                .findByCustomerIdAndDateBetween(customerId, start, end);
+        verify(customerRepository, times(1)).existsById(customerId);
+        verify(transactionRepository, never()).findByCustomerId(any());
     }
 }

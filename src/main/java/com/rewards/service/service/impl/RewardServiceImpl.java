@@ -10,8 +10,10 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import com.rewards.service.dto.RewardResponseDTO;
+import com.rewards.service.entity.Customer;
 import com.rewards.service.entity.Transaction;
-import com.rewards.service.error.ResourceNotFoundException;
+import com.rewards.service.error.CustomerNotFoundException;
+import com.rewards.service.repository.CustomerRepository;
 import com.rewards.service.repository.TransactionRepository;
 import com.rewards.service.service.RewardService;
 import com.rewards.service.util.RewardCalculator;
@@ -28,29 +30,41 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class RewardServiceImpl implements RewardService {
 
-	private final TransactionRepository repository;
+	private final TransactionRepository transactionRepository;
+	private final CustomerRepository customerRepository;
 
 	@Override
 	@Cacheable(value = "rewards", key = "#customerId + '-' + #start + '-' + #end")
 	public RewardResponseDTO getRewards(Long customerId, LocalDate start, LocalDate end) {
 
+		if (customerId == null || customerId <= 0) {
+			throw new IllegalArgumentException("Customer ID must be a positive number");
+		}
+
+		if (start != null && end != null && start.isAfter(end)) {
+			throw new IllegalArgumentException("Start date cannot be after end date");
+		}
+
+		if (!customerRepository.existsById(customerId)) {
+			throw new CustomerNotFoundException("Customer not found with id: " + customerId);
+		}
+
 		List<Transaction> transactions;
+		if (start != null && end != null) {
+			transactions = transactionRepository.findByCustomerIdAndDateBetween(customerId, start, end);
+		} else {
+			transactions = transactionRepository.findByCustomerId(customerId);
+		}
 
-		if (start != null && end != null)
-			transactions = repository.findByCustomerIdAndDateBetween(customerId, start, end);
-		else
-			transactions = repository.findByCustomerId(customerId);
-
-		if (transactions.isEmpty())
-			throw new ResourceNotFoundException("No transactions found");
-
-		Map<String, Integer> monthly = transactions.stream()
+		Map<String, Long> monthlyRewards = transactions.stream()
 				.collect(Collectors.groupingBy(t -> YearMonth.from(t.getDate()).toString(),
-						Collectors.summingInt(t -> RewardCalculator.calculate(t.getAmount()))));
+						Collectors.summingLong(t -> RewardCalculator.calculate(t.getAmount()))));
 
-		int total = monthly.values().stream().mapToInt(i -> i).sum();
+		Long totalPoints = monthlyRewards.values().stream().mapToLong(Long::longValue).sum();
 
-		return new RewardResponseDTO(customerId, monthly, total);
+		String customerName = customerRepository.findById(customerId).map(Customer::getName).orElse("Unknown");
+
+		return new RewardResponseDTO(customerId, customerName, monthlyRewards, totalPoints);
 	}
 
 }

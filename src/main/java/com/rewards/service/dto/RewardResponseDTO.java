@@ -13,8 +13,9 @@ import lombok.Data;
 @AllArgsConstructor
 public class RewardResponseDTO {
 
-	private Long id;
-	private Map<String, Integer> monthlyRewards;
-	private Integer totalRewards;
+	private Long customerId;
+	private String customerName;
+	private Map<String, Long> monthlyRewards;
+	private Long totalRewards;
 
 }
